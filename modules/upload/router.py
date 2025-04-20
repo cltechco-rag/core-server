@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Depends, BackgroundTasks
 from .service import UploadService
 from .schema import VideoUploadResponse
 from .constants import ALLOWED_VIDEO_TYPES
@@ -24,6 +24,7 @@ def get_upload_service():
     * 영상 파일 업로드 및 검증
     * 파일 메타데이터 저장
     * 처리 작업 큐 등록
+    * STT(음성-텍스트 변환) 처리
     
     ## 제한사항
     * 허용된 파일 형식: MP4, AVI, MOV, WMV
@@ -36,6 +37,7 @@ def get_upload_service():
     """
 )
 async def upload_video(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str = None,
     service: UploadService = Depends(get_upload_service)
@@ -61,7 +63,8 @@ async def upload_video(
         # 3. 서비스 계층에 처리 위임
         result = await service.process_video_upload(
             file=file,
-            title=title or file.filename
+            title=title or file.filename,
+            background_tasks=background_tasks
         )
         
         return VideoUploadResponse(
@@ -85,4 +88,80 @@ def get_all_videos():
         videos = db.query(Video).all()
         return [video.to_dict() for video in videos]
     finally:
-        db.close() 
+        db.close()
+
+@router.get("/videos/{video_id}", summary="특정 비디오 조회")
+def get_video_by_id(video_id: str):
+    """ID로 특정 비디오의 정보와 변환된 텍스트를 조회합니다."""
+    from core.database import SessionLocal
+    from models.video import Video
+    
+    db = SessionLocal()
+    try:
+        video = db.query(Video).filter(Video.id == int(video_id)).first()
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Video with id {video_id} not found"
+            )
+        return video.to_dict()
+    finally:
+        db.close()
+
+@router.get("/videos/{video_id}/stt-status", summary="STT 처리 상태 확인")
+def get_stt_status(video_id: str):
+    """ID로 특정 비디오의 STT 처리 상태를 조회합니다."""
+    from core.database import SessionLocal
+    from models.video import Video
+    
+    db = SessionLocal()
+    try:
+        video = db.query(Video).filter(Video.id == int(video_id)).first()
+        if not video:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Video with id {video_id} not found"
+            )
+        
+        # transcript 필드로 처리 상태 판단
+        if video.transcript:
+            status = "완료"
+            transcript_preview = video.transcript[:200] + "..." if len(video.transcript) > 200 else video.transcript
+        else:
+            status = "처리 중"
+            transcript_preview = None
+            
+        return {
+            "video_id": str(video.id),
+            "title": video.title,
+            "processing_status": status,
+            "transcript_preview": transcript_preview,
+            "created_at": video.created_at,
+            "updated_at": video.updated_at
+        }
+    finally:
+        db.close()
+
+@router.get("/videos/{video_id}/background-task", summary="백그라운드 작업 상태 확인")
+def get_background_task_status(video_id: str, service: UploadService = Depends(get_upload_service)):
+    """비디오 처리를 위한 백그라운드 작업의 상태를 확인합니다."""
+    try:
+        result = service.get_background_task_status(int(video_id))
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )
+
+@router.post("/videos/{video_id}/cancel", summary="백그라운드 작업 취소")
+def cancel_background_task(video_id: str, service: UploadService = Depends(get_upload_service)):
+    """비디오 처리를 위한 백그라운드 작업을 취소합니다."""
+    try:
+        result = service.cancel_background_task(int(video_id))
+        return result
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        ) 

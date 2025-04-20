@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from modules.upload.router import router as upload_router
 from core.database import Base, engine
+from models.video import Video
+from models.transcript import Transcript
 
 app = FastAPI(
     title="Lecture QA Platform API",
@@ -51,4 +53,17 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True) 
+    import logging
+    
+    # 로깅 설정
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
+    try:
+        logger.info("서버 시작 중...")
+        uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
+    except Exception as e:
+        logger.error(f"서버 시작 실패: {str(e)}", exc_info=True) 
