@@ -5,6 +5,7 @@ from .constants import ALLOWED_VIDEO_TYPES
 from typing import List
 from models.video import Video
 from core.database import SessionLocal
+import logging
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -110,37 +111,24 @@ def get_video_by_id(video_id: str):
 
 @router.get("/videos/{video_id}/stt-status", summary="STT 처리 상태 확인")
 def get_stt_status(video_id: str):
-    """ID로 특정 비디오의 STT 처리 상태를 조회합니다."""
-    from core.database import SessionLocal
-    from models.video import Video
-    
-    db = SessionLocal()
+    """비디오의 STT 처리 상태를 조회합니다."""
     try:
-        video = db.query(Video).filter(Video.id == int(video_id)).first()
-        if not video:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Video with id {video_id} not found"
-            )
+        service = UploadService()
+        status = service.get_background_task_status(int(video_id))
         
-        # transcript 필드로 처리 상태 판단
-        if video.transcript:
-            status = "완료"
-            transcript_preview = video.transcript[:200] + "..." if len(video.transcript) > 200 else video.transcript
-        else:
-            status = "처리 중"
-            transcript_preview = None
-            
-        return {
-            "video_id": str(video.id),
-            "title": video.title,
-            "processing_status": status,
-            "transcript_preview": transcript_preview,
-            "created_at": video.created_at,
-            "updated_at": video.updated_at
-        }
-    finally:
-        db.close()
+        # 트랜스크립트 미리보기 추가
+        video = service.repository.get_video_by_id(int(video_id))
+        if video and video.transcript and video.transcript.content:
+            content = video.transcript.content
+            transcript_preview = content[:200] + "..." if len(content) > 200 else content
+            status["transcript_preview"] = transcript_preview
+        
+        return status
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"상태 조회 실패: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/videos/{video_id}/background-task", summary="백그라운드 작업 상태 확인")
 def get_background_task_status(video_id: str, service: UploadService = Depends(get_upload_service)):
