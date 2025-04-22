@@ -21,3 +21,7 @@ uploads/
 ./test_results
 ./test_results_1sec
 stt_parallel_test.log
+test_videos/
+test_results/
+test_results_1sec/
+test_videos/*.mp4
