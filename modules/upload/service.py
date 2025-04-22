@@ -118,10 +118,26 @@ class UploadService:
             background_tasks_status[video_id]["status"] = "completed"
             background_tasks_status[video_id]["progress"] = 100
             background_tasks_status[video_id]["last_update"] = time.time()
-            
+
+            # OpenAI 서비스를 사용하여 트랜스크립트 요약 실행
+            try:
+                from open_ai.service import OpenAIService
+                openai_service = OpenAIService()
+                summary = openai_service.summarize_transcript(video_id)
+                log_msg = f"[요약] 트랜스크립트 요약 완료 (ID: {video_id})"
+                logger.info(log_msg)
+                background_tasks_status[video_id]["log_messages"].append(log_msg)
+            except Exception as e:
+                error_msg = f"[요약] 트랜스크립트 요약 실패 (ID: {video_id}): {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                background_tasks_status[video_id]["log_messages"].append(error_msg)
+
+
             # 취소 목록에서 제거 (만약 있다면)
             if video_id in cancelled_tasks:
                 cancelled_tasks.remove(video_id)
+
+            
             
         except Exception as e:
             error_msg = f"[STT] 비디오 처리 실패 (ID: {video_id}): {str(e)}"
