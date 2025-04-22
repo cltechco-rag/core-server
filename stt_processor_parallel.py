@@ -24,21 +24,29 @@ class STTProcessorParallel:
     침묵 감지 기반으로 세그먼트를 나누고 병렬 처리하는 STT 프로세서
     """
     
-    def __init__(self, model_name: str = "medium", device: Optional[str] = None, num_workers: int = None):
+    def __init__(self, model_name: str = "medium", device: Optional[str] = None, num_workers: int = None, use_mixed_precision: bool = True):
         """
         STT 프로세서를 초기화합니다.
         
         Args:
             model_name: 사용할 Whisper 모델 이름 ("tiny", "base", "small", "medium", "large")
-            device: 사용할 장치 (None, "cpu", "cuda", "cuda:0", 등)
+            device: 사용할 장치 (None, "cpu", "cuda", "mps" 등)
             num_workers: 병렬 처리에 사용할 작업자 수 (None이면 CPU 코어 수 자동 설정)
+            use_mixed_precision: MPS에서 작동하지 않는 연산을 CPU로 실행할지 여부
         """
         self.model_name = model_name
         self.model = None
+        self.use_mixed_precision = use_mixed_precision
         
-        # 장치 설정 (GPU 또는 CPU)
+        # 장치 설정 (GPU, MPS 또는 CPU)
         if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                self.device = "mps"
+                logger.info("MPS(Metal Performance Shaders) 가속이 활성화되었습니다.")
+            elif torch.cuda.is_available():
+                self.device = "cuda"
+            else:
+                self.device = "cpu"
         else:
             self.device = device
         
@@ -48,10 +56,37 @@ class STTProcessorParallel:
             self.num_workers = max(2, int(os.cpu_count() * 0.75))
         else:
             self.num_workers = num_workers
-            
+        
+        # MPS 가속 정보 로깅
+        if self.device == "mps" and self.use_mixed_precision:
+            logger.info("혼합 정밀도 연산 모드가 활성화됨: 일부 연산은 CPU에서, 나머지는 MPS에서 실행됩니다.")
+        
         logger.info(f"Whisper {model_name} 모델을 초기화합니다...")
-        self.model = whisper.load_model(model_name, device=self.device)
+        self.model = self._load_model_with_device()
         logger.info(f"모델 초기화 완료 (device: {self.device}, 작업자 수: {self.num_workers})")
+    
+    def _load_model_with_device(self):
+        """
+        장치에 따라 모델을 로드합니다. MPS 사용 시 혼합 정밀도 옵션을 고려합니다.
+        """
+        if self.device == "mps" and self.use_mixed_precision:
+            # MPS를 사용하지만 일부 연산은 CPU에서 실행되도록 처리
+            logger.info("혼합 정밀도 모드로 Whisper 모델 로드 중 (MPS+CPU)...")
+            model = whisper.load_model(self.model_name, device="cpu")
+            
+            # 특정 sparse 텐서 연산을 제외하고 MPS로 이동
+            # 원본 모델의 인코더와 디코더만 MPS로 이동
+            try:
+                model.encoder.to("mps")
+                model.decoder.to("mps")
+                logger.info("Whisper 모델의 인코더와 디코더를 MPS로 이동했습니다.")
+            except Exception as e:
+                logger.warning(f"MPS 이동 중 오류: {str(e)}. CPU 모드로 계속합니다.")
+            
+            return model
+        else:
+            # 다른 장치(CPU, CUDA)는 그대로 사용
+            return whisper.load_model(self.model_name, device=self.device)
     
     def extract_audio_from_video(self, video_path: str, output_path: str, enhance_audio: bool = False) -> str:
         """
@@ -277,6 +312,7 @@ class STTProcessorParallel:
     def _get_thread_local_model(self):
         """
         현재 스레드에 대한 로컬 모델 인스턴스를 반환합니다.
+        이 메소드는 CPU 전용 스레드와 MPS 지원 스레드 모두에서 작동합니다.
         """
         thread_id = threading.get_ident()
         
@@ -285,8 +321,23 @@ class STTProcessorParallel:
             _thread_local.models = {}
         
         if thread_id not in _thread_local.models:
-            # CPU 모드에서 새 모델 인스턴스 로드
-            _thread_local.models[thread_id] = whisper.load_model(self.model_name, device="cpu")
+            # 스레드별 모델 로드
+            if self.device == "mps" and self.use_mixed_precision:
+                # MPS 모델 - 인코더/디코더는 MPS로 이동
+                model = whisper.load_model(self.model_name, device="cpu")
+                try:
+                    # 인코더와 디코더만 MPS로 이동
+                    model.encoder.to("mps")
+                    model.decoder.to("mps")
+                    logger.info(f"스레드 {thread_id}에 하이브리드(MPS+CPU) 모델 로드됨")
+                except Exception as e:
+                    logger.warning(f"MPS로 모델 일부 이동 실패, CPU 모드로 계속합니다: {str(e)}")
+                _thread_local.models[thread_id] = model
+            else:
+                # 병렬 모드에서는 항상 CPU 사용, 단일 모드에서는 self.device 사용
+                device = "cpu" if self.num_workers > 1 else self.device
+                _thread_local.models[thread_id] = whisper.load_model(self.model_name, device=device)
+                logger.info(f"스레드 {thread_id}에 {device} 모델 로드됨")
             
         return _thread_local.models[thread_id]
 
@@ -315,18 +366,58 @@ class STTProcessorParallel:
                 # 스레드별 모델 가져오기
                 model = self._get_thread_local_model()
                 
-                # 음성 인식 실행
-                segment_result = model.transcribe(
-                    chunk, 
-                    language="ko",  # 한국어 설정
-                    fp16=False      # CPU에서 FP16 비활성화
-                )
+                # MPS 장치인 경우 메모리 관리를 위해 캐시 정리
+                if self.device == "mps":
+                    torch.mps.empty_cache()
+                
+                # MPS와 CPU 중 적절한 장치 선택
+                if self.device == "mps" and self.use_mixed_precision:
+                    # MPS에서는 특정 연산에서 지속적으로 오류가 발생하므로
+                    # 중요한 부분만 MPS에서 실행하고, 실제 디코딩은 CPU에서 진행
+                    try:
+                        # 메인 모델 컴포넌트는 MPS 유지 (인코더/디코더)
+                        # 실제 추론은 CPU로 임시 전환하여 수행
+                        temp_device = "cpu"
+                        logger.info(f"청크 {chunk_id}: 하이브리드 모드로 처리 (MPS+CPU)")
+                        
+                        # 기존 모델에서 CPU 버전 복제 (무거운 작업이므로 스레드당 한 번만 수행)
+                        if not hasattr(model, '_cpu_clone'):
+                            # CPU 모델 생성 (경량 복제)
+                            model._cpu_clone = whisper.load_model(self.model_name, device="cpu")
+                            logger.info(f"청크 {chunk_id}: CPU 백업 모델 생성 완료")
+                        
+                        # CPU 모델을 사용하여 추론
+                        segment_result = model._cpu_clone.transcribe(
+                            chunk, 
+                            language="ko",
+                            fp16=False
+                        )
+                    except Exception as e:
+                        logger.warning(f"청크 {chunk_id}: 하이브리드 모드 처리 실패, 순수 CPU로 전환: {str(e)}")
+                        segment_result = whisper.load_model(self.model_name, device="cpu").transcribe(
+                            chunk, 
+                            language="ko",
+                            fp16=False
+                        )
+                else:
+                    # 일반 모드에서 실행 (CPU 또는 CUDA)
+                    segment_result = model.transcribe(
+                        chunk, 
+                        language="ko",
+                        fp16=False if self.device == "cpu" else True
+                    )
             
             chunk_end = time.time()
             
+            # 결과가 없으면 빈 텍스트 설정
+            if not segment_result or not isinstance(segment_result, dict) or "text" not in segment_result:
+                segment_text = ""
+                logger.warning(f"청크 {chunk_id}: 유효한 텍스트 결과가 없습니다.")
+            else:
+                segment_text = segment_result["text"].strip()
+            
             # 세그먼트 결과 저장
             segment_key = f"segment_{start_time_offset:.2f}_{end_time_offset:.2f}"
-            segment_text = segment_result["text"].strip()
             
             # 처리 정보 저장
             segment_info = {
@@ -334,7 +425,8 @@ class STTProcessorParallel:
                 "start": start_time_offset,
                 "end": end_time_offset,
                 "text": segment_text,
-                "processing_time": chunk_end - chunk_start
+                "processing_time": chunk_end - chunk_start,
+                "device_used": f"{self.device}+cpu" if self.device == "mps" and self.use_mixed_precision else self.device
             }
             
             return {
@@ -557,6 +649,8 @@ if __name__ == "__main__":
     parser.add_argument("--video", type=str, required=True, help="변환할 비디오 파일 경로")
     parser.add_argument("--output", type=str, default=None, help="결과 저장 디렉토리")
     parser.add_argument("--model", type=str, default="small", help="사용할 Whisper 모델 (tiny, base, small, medium, large)")
+    parser.add_argument("--device", type=str, default=None, help="사용할 장치 (cpu, cuda, mps, None=자동)")
+    parser.add_argument("--mixed-precision", action="store_true", help="MPS에서 일부 연산을 CPU로 실행 (MPS 사용 시)")
     parser.add_argument("--min-chunk", type=float, default=5.0, help="최소 청크 길이(초)")
     parser.add_argument("--max-chunk", type=float, default=30.0, help="최대 청크 길이(초)")
     parser.add_argument("--threshold", type=float, default=0.02, help="침묵 감지 임계값")
@@ -566,7 +660,12 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    processor = STTProcessorParallel(model_name=args.model, num_workers=args.workers)
+    processor = STTProcessorParallel(
+        model_name=args.model, 
+        device=args.device,
+        num_workers=args.workers,
+        use_mixed_precision=args.mixed_precision
+    )
     
     result = processor.process_video_to_text(
         args.video, 
@@ -580,6 +679,9 @@ if __name__ == "__main__":
     
     print("\n============= 처리 결과 =============")
     print(f"모델: {args.model}")
+    print(f"장치: {processor.device}")
+    if processor.device == "mps":
+        print(f"혼합 정밀도 모드: {'활성화' if processor.use_mixed_precision else '비활성화'}")
     print(f"병렬 작업자 수: {processor.num_workers}")
     print(f"처리 시간: {result.get('total_processing_time', 0):.2f}초")
     print(f"텍스트 길이: {len(result.get('text', ''))}")

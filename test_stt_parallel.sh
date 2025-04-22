@@ -4,7 +4,7 @@
 
 # 테스트 파일 경로
 VIDEO_DIR="./test_videos"
-RESULT_DIR="./test_results"
+RESULT_DIR="./test_results_hybrid"
 
 # Python 3.10 경로 확인
 PYTHON="python3.10"
