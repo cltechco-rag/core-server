@@ -16,3 +16,6 @@ numpy>=1.20.0
 librosa>=0.9.2
 psutil>=5.9.0
 tqdm>=4.65.0
+pgvector
+pydantic_settings
+konlpy
