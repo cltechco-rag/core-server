@@ -96,7 +96,7 @@ class UploadService:
             background_tasks_status[video_id]["progress"] = 20
             
             # STTProcessorParallel을 직접 사용하여 STT 처리 실행
-            processor = STTProcessorParallel(model_name="small")
+            processor = STTProcessorParallel(model_name="medium", num_workers=6)
             
             # 임시 출력 디렉토리 설정
             temp_dir = "temp"
