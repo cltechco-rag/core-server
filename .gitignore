@@ -16,4 +16,8 @@ uploads/
 
 # VSCode or PyCharm
 .vscode/
-.idea/
+.idea/test_videos/
+./test_videos
+./test_results
+./test_results_1sec
+stt_parallel_test.log

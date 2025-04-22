@@ -1,0 +1,6 @@
+Total segments: 16
+Average segment length: 28.22s
+Minimum segment length: 1.49s
+Maximum segment length: 30.00s
+Average processing time: 34.47s
+Maximum processing time: 62.16s

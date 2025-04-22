@@ -194,7 +194,8 @@ class STTProcessorParallel:
         return silence_boundaries
     
     def _adaptive_chunk_audio(self, audio: np.ndarray, sr: int = 16000, 
-                              min_chunk: float = 5.0, max_chunk: float = 30.0) -> List[Tuple[np.ndarray, float]]:
+                              min_chunk: float = 5.0, max_chunk: float = 30.0,
+                              overlap_sec: float = 1.0) -> List[Tuple[np.ndarray, float]]:
         """
         침묵 구간을 기반으로 오디오를 적응적으로 분할합니다.
         
@@ -203,6 +204,7 @@ class STTProcessorParallel:
             sr: 샘플링 레이트
             min_chunk: 최소 청크 길이(초)
             max_chunk: 최대 청크 길이(초)
+            overlap_sec: 세그먼트 간 중복 구간 길이(초)
             
         Returns:
             (오디오 청크, 시작 시간(초)) 튜플의 리스트
@@ -213,6 +215,7 @@ class STTProcessorParallel:
         # 최소, 최대 청크 길이를 샘플 수로 변환
         min_chunk_samples = int(min_chunk * sr)
         max_chunk_samples = int(max_chunk * sr)
+        overlap_samples = int(overlap_sec * sr)
         
         # 청크 나누기
         chunks = []
@@ -232,6 +235,10 @@ class STTProcessorParallel:
                 num_subchunks = (chunk_length + max_chunk_samples - 1) // max_chunk_samples
                 for i in range(num_subchunks):
                     sub_start = start_sample + i * max_chunk_samples
+                    # 첫 번째 청크가 아닌 경우 중복 구간 추가
+                    if i > 0:
+                        sub_start = max(0, sub_start - overlap_samples)
+                    
                     sub_end = min(sub_start + max_chunk_samples, silence_sample)
                     sub_chunk = audio[sub_start:sub_end]
                     chunks.append((sub_chunk, sub_start / sr))
@@ -252,6 +259,10 @@ class STTProcessorParallel:
                 num_subchunks = (remaining_length + max_chunk_samples - 1) // max_chunk_samples
                 for i in range(num_subchunks):
                     sub_start = start_sample + i * max_chunk_samples
+                    # 첫 번째 청크가 아닌 경우 중복 구간 추가
+                    if i > 0:
+                        sub_start = max(0, sub_start - overlap_samples)
+                    
                     sub_end = min(sub_start + max_chunk_samples, len(audio))
                     sub_chunk = audio[sub_start:sub_end]
                     chunks.append((sub_chunk, sub_start / sr))
@@ -260,7 +271,7 @@ class STTProcessorParallel:
                 chunk = audio[start_sample:]
                 chunks.append((chunk, start_sample / sr))
         
-        logger.info(f"적응형 청크 분할: {len(chunks)}개의 청크 생성")
+        logger.info(f"적응형 청크 분할: {len(chunks)}개의 청크 생성 (중복 구간: {overlap_sec}초)")
         return chunks
 
     def _get_thread_local_model(self):
@@ -351,7 +362,8 @@ class STTProcessorParallel:
             }
     
     def transcribe_audio(self, audio_path: str, min_chunk: float = 5.0, max_chunk: float = 30.0, 
-                         threshold: float = 0.02, min_silence: float = 0.7) -> dict:
+                         threshold: float = 0.02, min_silence: float = 0.7,
+                         overlap_sec: float = 1.0) -> dict:
         """
         오디오 파일을 텍스트로 변환합니다 (병렬 처리).
         
@@ -361,6 +373,7 @@ class STTProcessorParallel:
             max_chunk: 최대 청크 길이(초)
             threshold: 침묵 감지 임계값
             min_silence: 최소 침묵 지속 시간(초)
+            overlap_sec: 세그먼트 간 중복 구간 길이(초)
             
         Returns:
             텍스트 변환 결과와 메타데이터
@@ -382,7 +395,7 @@ class STTProcessorParallel:
             memory_before = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)  # MB
             
             # 침묵 기반 적응형 분할
-            chunks = self._adaptive_chunk_audio(audio, sr, min_chunk, max_chunk)
+            chunks = self._adaptive_chunk_audio(audio, sr, min_chunk, max_chunk, overlap_sec)
             
             # 세그먼트별 결과 저장
             results = {
@@ -446,6 +459,7 @@ class STTProcessorParallel:
                 "min_silence": min_silence,
                 "min_chunk": min_chunk,
                 "max_chunk": max_chunk,
+                "overlap_sec": overlap_sec,
                 "num_chunks": len(chunks)
             }
             
@@ -469,7 +483,8 @@ class STTProcessorParallel:
             
     def process_video_to_text(self, video_path: str, output_dir: str = None, 
                              min_chunk: float = 5.0, max_chunk: float = 30.0,
-                             threshold: float = 0.02, min_silence: float = 0.7) -> dict:
+                             threshold: float = 0.02, min_silence: float = 0.7,
+                             overlap_sec: float = 1.0) -> dict:
         """
         비디오 파일을 텍스트로 변환하는 전체 프로세스를 실행합니다.
         
@@ -480,6 +495,7 @@ class STTProcessorParallel:
             max_chunk: 최대 청크 길이(초)
             threshold: 침묵 감지 임계값
             min_silence: 최소 침묵 지속 시간(초)
+            overlap_sec: 세그먼트 간 중복 구간 길이(초)
             
         Returns:
             텍스트 변환 결과와 메타데이터
@@ -505,7 +521,8 @@ class STTProcessorParallel:
                 min_chunk=min_chunk,
                 max_chunk=max_chunk,
                 threshold=threshold,
-                min_silence=min_silence
+                min_silence=min_silence,
+                overlap_sec=overlap_sec
             )
             
             # 텍스트 결과 저장
@@ -544,6 +561,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-chunk", type=float, default=30.0, help="최대 청크 길이(초)")
     parser.add_argument("--threshold", type=float, default=0.02, help="침묵 감지 임계값")
     parser.add_argument("--min-silence", type=float, default=0.7, help="최소 침묵 지속 시간(초)")
+    parser.add_argument("--overlap-sec", type=float, default=1.0, help="세그먼트 간 중복 구간 길이(초)")
     parser.add_argument("--workers", type=int, default=None, help="병렬 처리에 사용할 작업자 수 (기본값: CPU 코어 수의 3/4)")
     
     args = parser.parse_args()
@@ -556,7 +574,8 @@ if __name__ == "__main__":
         min_chunk=args.min_chunk,
         max_chunk=args.max_chunk,
         threshold=args.threshold,
-        min_silence=args.min_silence
+        min_silence=args.min_silence,
+        overlap_sec=args.overlap_sec
     )
     
     print("\n============= 처리 결과 =============")
@@ -566,4 +585,5 @@ if __name__ == "__main__":
     print(f"텍스트 길이: {len(result.get('text', ''))}")
     print(f"세그먼트 수: {len(result.get('segments', []))}")
     print(f"청크 수: {result.get('silence_detection', {}).get('num_chunks', 0)}")
+    print(f"중복 구간: {args.overlap_sec}초")
     print("======================================")

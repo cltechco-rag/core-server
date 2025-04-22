@@ -1,0 +1,14 @@
+{
+  "video_path": "./test_videos/youtube_20250422_003840.mp4",
+  "model": "large",
+  "min_chunk": 5.0,
+  "max_chunk": 30.0,
+  "threshold": 0.02,
+  "min_silence": 0.7,
+  "num_workers": 4,
+  "processing_time": 145.70721006393433,
+  "memory_usage_mb": -3077.765625,
+  "text_length": 4031,
+  "segment_count": 16,
+  "chunk_count": 16
+}
