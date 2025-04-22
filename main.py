@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from modules.upload.router import router as upload_router
 from open_ai.router import router as openai_router
+from app.routers.auth import router as auth_router
 from core.database import Base, engine
 from models.video import Video
 from models.transcript import Transcript
@@ -51,6 +52,7 @@ async def startup():
 # API 라우터 등록
 app.include_router(upload_router)
 app.include_router(openai_router)
+app.include_router(auth_router, prefix="/auth", tags=["authentication"])
 
 @app.get("/")
 async def root():
@@ -115,6 +117,6 @@ if __name__ == "__main__":
     
     try:
         logger.info("서버 시작 중...")
-        uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
     except Exception as e:
         logger.error(f"서버 시작 실패: {str(e)}", exc_info=True) 
