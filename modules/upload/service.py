@@ -2,7 +2,7 @@ from fastapi import UploadFile, BackgroundTasks
 import uuid
 from .repository import UploadRepository
 from .constants import ProcessingStatus
-from utils.stt_processor import process_video_to_text
+from utils.stt_processor_parallel import STTProcessorParallel
 import os
 import logging
 import time
@@ -95,8 +95,15 @@ class UploadService:
             background_tasks_status[video_id]["log_messages"].append(log_msg)
             background_tasks_status[video_id]["progress"] = 20
             
+            # STTProcessorParallel을 직접 사용하여 STT 처리 실행
+            processor = STTProcessorParallel(model_name="small")
+            
+            # 임시 출력 디렉토리 설정
+            temp_dir = "temp"
+            os.makedirs(temp_dir, exist_ok=True)
+            
             # STT 처리 실행
-            transcription_result = process_video_to_text(file_path)
+            transcription_result = processor.process_video_to_text(file_path, output_dir=temp_dir)
             
             # 취소 확인
             if video_id in cancelled_tasks:
