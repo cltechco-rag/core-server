@@ -4,9 +4,9 @@ from langchain.chat_models import AzureChatOpenAI
 from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from .repository import UploadRepository
+from .constants import ProcessingStatus
+from utils.stt_processor import STTProcessorParallel
 from open_ai.service import OpenAIService
-
-# from utils.stt_processor_parallel import STTProcessorParallel
 import os
 import logging
 import time
