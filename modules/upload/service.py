@@ -2,7 +2,7 @@ from fastapi import UploadFile, BackgroundTasks
 import uuid
 from .repository import UploadRepository
 from .constants import ProcessingStatus
-from utils.stt_processor_parallel import STTProcessorParallel
+from utils.stt_processor import STTProcessorParallel
 import os
 import logging
 import time
