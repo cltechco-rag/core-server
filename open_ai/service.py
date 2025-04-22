@@ -4,13 +4,15 @@ import logging
 from .repository import OpenAIRepository
 from typing import List
 from models.transcript import Transcript
+from config.config import settings
 
 logger = logging.getLogger(__name__)
+
 
 class OpenAIService:
     def __init__(self):
         self.repository = OpenAIRepository()
-        
+
     def get_transcript(self, video_id: int) -> Transcript:
         """비디오 ID로 트랜스크립트를 조회합니다."""
         transcript = self.repository.get_transcript_by_video_id(video_id)
@@ -26,13 +28,13 @@ class OpenAIService:
         """텍스트 내용을 요약합니다."""
         try:
             client = AzureOpenAI(
-                api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-                api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01"),
-                azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+                api_key=settings.AZURE_CHAT_API_KEY,
+                api_version=settings.AZURE_CHAT_API_VERSION,
+                azure_endpoint=settings.AZURE_CHAT_ENDPOINT,
             )
 
             system_prompt = """
-                                당신은 전문적인 회의록 요약 어시스턴트입니다. 
+                                당신은 전문적인 회의록 요약 어시스턴트입니다.
                                 다음 지침에 따라 회의 내용을 요약해주세요:
 
                                 1. 회의의 주요 주제와 핵심 결정사항을 먼저 제시
@@ -57,13 +59,13 @@ class OpenAIService:
                             """
 
             response = client.chat.completions.create(
-                model=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+                model=settings.AZURE_CHAT_DEPLOYMENT,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": content}
+                    {"role": "user", "content": content},
                 ],
                 temperature=0.3,  # 더 일관된 출력을 위해 temperature 조정
-                max_tokens=1500   # 더 긴 요약을 위해 토큰 수 증가
+                max_tokens=1500,  # 더 긴 요약을 위해 토큰 수 증가
             )
 
             return response.choices[0].message.content
@@ -80,8 +82,8 @@ class OpenAIService:
 
         # 요약 생성
         summary = self.summarize_text(transcript.content)
-        
+
         # 요약 내용 저장
         self.repository.update_transcript(video_id, summary)
-        
-        return summary 
+
+        return summary

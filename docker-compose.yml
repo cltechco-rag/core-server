@@ -1,18 +1,16 @@
-version: '3.8'
-
 services:
   postgres:
-    image: postgres:15
+    image: ankane/pgvector:latest
     container_name: lecture_qa_postgres
     environment:
-      POSTGRES_USER: lecture_qa
-      POSTGRES_PASSWORD: lecture_qa123
-      POSTGRES_DB: lecture_qa_db
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
     ports:
-      - "5433:5432"  # 호스트의 5433 포트를 컨테이너의 5432 포트에 매핑
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
 
 volumes:
-  postgres_data: 
+  postgres_data:
