@@ -1,7 +1,9 @@
-from sqlalchemy import func, text, cast, bindparam
+from sqlalchemy import func, text, cast
+from sqlalchemy.orm import aliased
 from pgvector.sqlalchemy import Vector
 from core.database import SessionLocal
 from models.rag_document import RAGDocument
+from models.video import Video
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,10 +43,11 @@ class RAGRepository:
         finally:
             db.close()
 
-    def get_scores(self, query, query_embedding):
+    def get_scores(self, user_id, query, query_embedding):
         db = self.db_factory()
         try:
             # First get a count of documents to limit the query if needed
+            VideoAlias = aliased(Video)
             raw_results = (
                 db.query(
                     RAGDocument,
@@ -68,6 +71,8 @@ class RAGRepository:
                         32,  # normalization option
                     ).label("bm25_score"),
                 )
+                .join(VideoAlias, RAGDocument.video_id == VideoAlias.id)
+                .filter(VideoAlias.user_id == user_id)
                 .params(query=query, query_embedding=query_embedding)
                 .all()
             )
@@ -75,6 +80,33 @@ class RAGRepository:
             return raw_results
         except Exception as e:
             logger.error(f"Error in get_scores: {str(e)}", exc_info=True)
+            raise
+        finally:
+            db.close()
+
+    def delete_documents_by_video_id(self, video_id: int) -> int:
+        """
+        Delete all RAG documents associated with a specific video ID.
+
+        Args:
+            video_id (int): The ID of the video whose documents should be deleted
+
+        Returns:
+            int: The number of documents deleted
+        """
+        db = self.db_factory()
+        try:
+            result = (
+                db.query(RAGDocument).filter(RAGDocument.video_id == video_id).delete()
+            )
+            db.commit()
+            return result
+        except Exception as e:
+            db.rollback()
+            logger.error(
+                f"Error deleting documents for video {video_id}: {str(e)}",
+                exc_info=True,
+            )
             raise
         finally:
             db.close()

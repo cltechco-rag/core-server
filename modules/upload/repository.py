@@ -13,11 +13,7 @@ class UploadRepository:
     def save_video_metadata(
         self, title: str, file_path: str, user_id: int, status: str = None
     ) -> Video:
-        video = Video(
-            title=title,
-            file_path=file_path,
-            user_id=user_id
-        )
+        video = Video(title=title, file_path=file_path, user_id=user_id)
         self.db.add(video)
         self.db.flush()
         self.db.refresh(video)
@@ -58,6 +54,19 @@ class UploadRepository:
 
     def get_transcript_by_video_id(self, video_id: int) -> Optional[Transcript]:
         return self.db.query(Transcript).filter(Transcript.video_id == video_id).first()
+
+    def update_video(self, video_id: int, **kwargs) -> Optional[Video]:
+        video = self.get_video_by_id(video_id)
+        if not video:
+            return None
+
+        for key, value in kwargs.items():
+            if hasattr(video, key):
+                setattr(video, key, value)
+
+        self.db.flush()
+        self.db.refresh(video)
+        return video
 
     def update_video_transcript(self, video_id: int, transcript_content: str) -> Video:
         video = self.get_video_by_id(video_id)

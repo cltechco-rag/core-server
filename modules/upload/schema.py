@@ -6,8 +6,8 @@ from typing import Optional
 class VideoUploadResponse(BaseModel):
     message: str
     video_id: str
+    video_path: str
     status: str
-    estimated_time: str
     created_at: datetime = datetime.now()
 
 

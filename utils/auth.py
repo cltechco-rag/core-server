@@ -17,11 +17,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
+
 def get_password_hash(password):
     return pwd_context.hash(password)
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -33,7 +36,10 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(credentials = Depends(security), db: Session = Depends(get_db)):
+
+async def get_current_user(
+    credentials=Depends(security), db: Session = Depends(get_db)
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -41,7 +47,9 @@ async def get_current_user(credentials = Depends(security), db: Session = Depend
     )
     try:
         token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token, SECRET_KEY, algorithms=[ALGORITHM], options={"verify_exp": False}
+        )
         email: str = payload.get("sub")
         user_id: int = payload.get("user_id")
         if email is None or user_id is None:
@@ -49,7 +57,11 @@ async def get_current_user(credentials = Depends(security), db: Session = Depend
         token_data = TokenData(email=email, user_id=user_id)
     except JWTError:
         raise credentials_exception
-    user = db.query(User).filter(User.email == token_data.email, User.id == token_data.user_id).first()
+    user = (
+        db.query(User)
+        .filter(User.email == token_data.email, User.id == token_data.user_id)
+        .first()
+    )
     if user is None:
         raise credentials_exception
-    return user 
+    return user

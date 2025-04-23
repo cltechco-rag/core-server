@@ -14,6 +14,8 @@ from .schema import (
 )
 from core.database import get_db
 from sqlalchemy.orm import Session
+from utils.auth import get_current_user
+from models.user import User
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
@@ -37,11 +39,31 @@ async def preprocess_rag(
     service: RAGService = Depends(get_rag_service),
 ):
     background_tasks.add_task(service.run_preprocess_pipeline, request.video_id)
-    # service.run_preprocess_pipeline(request.video_id)
     return RAGPreprocessingResponse(
         message="RAG 전처리 요청이 큐에 등록되었습니다.",
         video_id=request.video_id,
         status="pending",
+    )
+
+
+@router.post(
+    "/exclude",
+    response_model=RAGPreprocessingResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="RAG 제외",
+    description="""
+    RAG 제외를 처리합니다.
+    """,
+)
+async def exclude_from_rag(
+    request: RAGPreprocessingRequest,
+    service: RAGService = Depends(get_rag_service),
+):
+    service.remove_video_from_rag_search(request.video_id)
+    return RAGPreprocessingResponse(
+        message="RAG에서 제외됐습니다.",
+        video_id=request.video_id,
+        status="success",
     )
 
 
@@ -78,7 +100,9 @@ async def get_preprocess_status(
     """,
 )
 async def query(
-    request: SearchRequest, service: RAGService = Depends(get_rag_service)
+    request: SearchRequest,
+    service: RAGService = Depends(get_rag_service),
+    current_user: User = Depends(get_current_user),
 ) -> AnswerResponse:
     """Generate answer using RAG"""
     if (
@@ -99,4 +123,5 @@ async def query(
         title_vector_weight=request.title_vector_weight,
         bm25_weight=request.bm25_weight,
         rerank=request.rerank,
+        user_id=current_user.id,
     )

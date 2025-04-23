@@ -8,17 +8,16 @@ from fastapi import (
     Depends,
     BackgroundTasks,
 )
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 from .service import UploadService
 from .schema import VideoUploadResponse
 from .constants import ALLOWED_VIDEO_TYPES
 from models.video import Video
-from core.database import SessionLocal
-import logging
 from models.user import User
 from core.database import get_db
 from utils.auth import get_current_user
 from sqlalchemy.orm import Session
+import os
 
 router = APIRouter(tags=["upload"])
 
@@ -87,8 +86,8 @@ async def upload_video(
         return VideoUploadResponse(
             message="Video upload successful. Processing has been queued.",
             video_id=result["video_id"],
+            video_path=result["video_path"],
             status="PROCESSING",
-            estimated_time="5-10 minutes",
         )
 
     except Exception as e:
@@ -101,6 +100,7 @@ async def upload_video(
 async def upload_transcript(
     background_tasks: BackgroundTasks,
     title: str = Form(),
+    user_id: int = Form(),
     file: UploadFile = File(...),
     service: UploadService = Depends(get_upload_service),
     db: Session = Depends(get_db),
@@ -121,7 +121,7 @@ async def upload_transcript(
 
         # 2. 서비스 계층에 처리 위임
         result = await service.process_transcript_upload(
-            title=title, file=file, background_tasks=background_tasks
+            title=title, user_id=user_id, file=file, background_tasks=background_tasks
         )
         db.commit()
 
@@ -136,23 +136,66 @@ async def upload_transcript(
         )
 
 
-@router.get("/videos", summary="모든 비디오 목록 조회")
-def get_all_videos(db: Session = Depends(get_db)):
-    """데이터베이스에 저장된 모든 비디오 목록을 반환합니다."""
-    videos = db.query(Video).all()
-    return [video.to_dict() for video in videos]
+@router.post("/transcript/video", summary="트랜스크립트에 맞는 영상 올리기")
+async def upload_transcript(
+    file: UploadFile = File(...),
+    video_id: int = Form(),
+    service: UploadService = Depends(get_upload_service),
+    db: Session = Depends(get_db),
+):
+    await service.simply_upload_video(video_id=video_id, file=file)
+    return {"message": "Video upload successful."}
+
+
+@router.get("/videos", summary="사용자의 비디오 목록 조회")
+def get_all_videos(
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
+):
+    """인증된 사용자의 비디오 목록을 반환합니다."""
+    query = db.query(Video).filter(Video.user_id == current_user.id)
+
+    videos = query.all()
+    video_list = []
+    for video in videos:
+        video_list.append(
+            {
+                "id": video.id,
+                "title": video.title,
+                "thumbnail": os.path.splitext(video.file_path)[0]
+                + ".jpg?height=180&width=320",
+                "createdAt": video.created_at,
+                "transcriptionStatus": video.transcription_status,
+                "ragStatus": video.rag_status,
+                "isRAG": False,
+            }
+        )
+    return video_list
 
 
 @router.get("/videos/{video_id}", summary="특정 비디오 조회")
 def get_video_by_id(video_id: str, db: Session = Depends(get_db)):
     """ID로 특정 비디오의 정보와 변환된 텍스트를 조회합니다."""
-    video = db.query(Video).filter(Video.id == int(video_id)).first()
+    video = (
+        db.query(Video)
+        .options(load_only(Video.id, Video.title, Video.file_path, Video.created_at))
+        .filter(Video.id == int(video_id))
+        .first()
+    )
     if not video:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Video with id {video_id} not found",
         )
-    return video.to_dict()
+    video_dict = video.to_dict()
+    video_dict["transcription_status"] = video.transcription_status
+    video_dict["is_rag"] = True
+    video_dict["rag_status"] = video.rag_status
+    video_dict["summary"] = (
+        video.transcript.summary
+        if video.transcript and video.transcript.summary
+        else ""
+    )
+    return video_dict
 
 
 @router.get("/videos/{video_id}/stt-status", summary="STT 처리 상태 확인")

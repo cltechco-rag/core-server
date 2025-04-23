@@ -53,6 +53,7 @@ class RAGService:
         )
         self.upload_repo = UploadRepository(db)
         self.rag_repo = RAGRepository()
+        self.db = db
 
     def _split_by_topic_llm(self, transcript: str, chunk_len: int = 6000) -> list[str]:
         prompt = PromptTemplate.from_template(TOPIC_SPLIT_PROMPT)
@@ -122,6 +123,9 @@ class RAGService:
     def run_preprocess_pipeline(self, video_id: int):
         """텍스트를 벡터 임베딩으로 변환하고 토큰화하는 백그라운드 작업"""
         try:
+            self.upload_repo.update_video(video_id=video_id, rag_status="PENDING")
+            self.db.commit()
+
             # 작업 상태 초기화
             background_tasks_status[video_id] = {
                 "status": "processing",
@@ -188,6 +192,8 @@ class RAGService:
             background_tasks_status[video_id]["log_messages"].append(
                 "작업이 완료되었습니다."
             )
+            self.upload_repo.update_video(video_id=video_id, rag_status="INCLUDED")
+            self.db.commit()
             return True
 
         except Exception as e:
@@ -195,6 +201,8 @@ class RAGService:
             logger.error(error_msg)
             background_tasks_status[video_id]["status"] = "failed"
             background_tasks_status[video_id]["log_messages"].append(error_msg)
+            self.upload_repo.update_video(video_id=video_id, rag_status="NOT_INCLUDED")
+            self.db.commit()
             return False
 
     def run_hybrid_search(
@@ -203,11 +211,12 @@ class RAGService:
         content_vector_weight: float,
         title_vector_weight: float,
         bm25_weight: float,
+        user_id: int,
         top_k: int = 10,
     ):
         start_time = time.time()
         query_embedding = self.run_vector_embedding(query)
-        raw_results = self.rag_repo.get_scores(query, query_embedding)
+        raw_results = self.rag_repo.get_scores(user_id, query, query_embedding)
 
         if not raw_results:
             return [], 0
@@ -288,12 +297,18 @@ class RAGService:
         title_vector_weight: float,
         bm25_weight: float,
         rerank: bool,
+        user_id: int,
         top_k: int = 5,
     ) -> AnswerResponse:
         """Generate an answer using LLM based on retrieved documents"""
         # Retrieve relevant documents
         results, query_time = self.run_hybrid_search(
-            query, content_vector_weight, title_vector_weight, bm25_weight, top_k
+            query,
+            content_vector_weight,
+            title_vector_weight,
+            bm25_weight,
+            user_id,
+            top_k,
         )
 
         print(results)
@@ -322,3 +337,9 @@ class RAGService:
         return AnswerResponse(
             answer=answer, query_time=query_time, total_documents=len(results)
         )
+
+    def remove_video_from_rag_search(self, video_id):
+
+        self.rag_repo.delete_documents_by_video_id(video_id)
+        self.upload_repo.update_video(video_id=video_id, rag_status="NOT_INCLUDED")
+        self.db.commit()
