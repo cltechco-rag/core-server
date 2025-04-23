@@ -5,12 +5,15 @@ from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from .repository import UploadRepository
 from .constants import ProcessingStatus
-from utils.stt_processor_parallel import STTProcessorParallel
+from sqlalchemy.orm import Session
+from utils.stt_processor import STTProcessorParallel
 from open_ai.service import OpenAIService
+from models.video import Video
 import os
 import logging
 import time
 from typing import Dict, Any, Set
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +25,12 @@ cancelled_tasks: Set[int] = set()
 
 
 class UploadService:
-    def __init__(self):
-        self.repository = UploadRepository()
-        self.openai_service = OpenAIService()
+    def __init__(self, db: Session):
+        self.repository = UploadRepository(db)
+        self.openai_service = OpenAIService(db)
 
     async def process_video_upload(
-        self, file: UploadFile, title: str, background_tasks: BackgroundTasks
+        self, file: UploadFile, title: str, background_tasks: BackgroundTasks, user_id: int
     ):
         # 파일 저장 경로 생성
         upload_dir = "uploads"
@@ -40,7 +43,7 @@ class UploadService:
             f.write(content)
 
         # 메타데이터 저장
-        video = self.repository.save_video_metadata(title=title, file_path=file_path)
+        video = self.repository.save_video_metadata(title=title, file_path=file_path, user_id=user_id)
 
         # 백그라운드 작업 상태 초기화
         video_id = video.id
@@ -158,24 +161,23 @@ class UploadService:
             background_tasks_status[video_id]["progress"] = 20
 
             # STTProcessorParallel을 직접 사용하여 STT 처리 실행
-            # processor = STTProcessorParallel(model_name="medium", num_workers=6)
+            processor = STTProcessorParallel(model_name="medium", num_workers=4)
 
             # 임시 출력 디렉토리 설정
             temp_dir = "temp"
             os.makedirs(temp_dir, exist_ok=True)
 
             # STT 처리 실행
-            # transcription_result = processor.process_video_to_text(
-            #     file_path, output_dir=temp_dir
-            # )
+            transcription_result = processor.process_video_to_text(
+                file_path, output_dir=temp_dir
+            )
 
             # 취소 확인
             if video_id in cancelled_tasks:
                 raise ValueError("작업이 사용자에 의해 취소되었습니다.")
 
             # 전체 텍스트 추출
-            # full_text = transcription_result["text"]
-            full_text = "임시 텍스트"  # TODO: 실제 STT 처리 결과로 대체
+            full_text = transcription_result["text"]
             log_msg = f"[STT] 텍스트 변환 완료: {len(full_text)} 문자"
             logger.info(log_msg)
             background_tasks_status[video_id]["log_messages"].append(log_msg)
@@ -267,3 +269,25 @@ class UploadService:
             "success": True,
             "message": "작업 취소가 요청되었습니다. 진행 중인 단계가 완료된 후 취소됩니다.",
         }
+
+    async def upload_video(self, file: UploadFile, title: str, user_id: int) -> Video:
+        # 파일 저장 경로 생성
+        file_path = os.path.join("uploads", file.filename)
+        os.makedirs("uploads", exist_ok=True)
+
+        # 파일 저장
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            content = await file.read()
+            await out_file.write(content)
+
+        # DB에 비디오 정보 저장
+        db_video = Video(
+            title=title,
+            file_path=file_path,
+            user_id=user_id
+        )
+        self.db.add(db_video)
+        self.db.commit()
+        self.db.refresh(db_video)
+
+        return db_video

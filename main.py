@@ -14,6 +14,7 @@ from fastapi import UploadFile, File
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+from modules.video.router import router as video_router
 
 load_dotenv()
 app = FastAPI(
@@ -56,11 +57,12 @@ async def startup():
 
 
 # API 라우터 등록
-app.include_router(upload_router)
+app.include_router(upload_router, prefix="/upload", tags=["upload"])
 app.include_router(openai_router)
 app.include_router(auth_router, prefix="/auth", tags=["authentication"])
 app.include_router(notion_auth_router, tags=["notion-auth"])
 app.include_router(rag_router)
+app.include_router(video_router, prefix="/video", tags=["video"])
 
 
 @app.get("/")

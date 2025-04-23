@@ -1,21 +1,25 @@
 from typing import Optional
+from sqlalchemy.orm import Session
 from models.video import Video
 from models.transcript import Transcript
 from .schema import VideoProcessingStatus
 from .constants import ProcessingStatus
-from core.database import SessionLocal
 
 
 class UploadRepository:
-    def __init__(self):
-        self.db = SessionLocal()
+    def __init__(self, db: Session):
+        self.db = db
 
     def save_video_metadata(
-        self, title: str, file_path: str, status: str = None
+        self, title: str, file_path: str, user_id: int, status: str = None
     ) -> Video:
-        video = Video(title=title, file_path=file_path)
+        video = Video(
+            title=title,
+            file_path=file_path,
+            user_id=user_id
+        )
         self.db.add(video)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(video)
         return video
 
@@ -45,7 +49,7 @@ class UploadRepository:
     def create_video(self, title: str, file_path: str) -> Video:
         video = Video(title=title, file_path=file_path)
         self.db.add(video)
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(video)
         return video
 
@@ -67,6 +71,6 @@ class UploadRepository:
             transcript = Transcript(video_id=video_id, content=transcript_content)
             self.db.add(transcript)
 
-        self.db.commit()
+        self.db.flush()
         self.db.refresh(video)
         return video

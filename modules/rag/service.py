@@ -13,6 +13,7 @@ from openai import AzureOpenAI
 from konlpy.tag import Okt
 import time
 from typing import Dict, Any
+from sqlalchemy.orm import Session
 
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ Transcript:
 
 class RAGService:
 
-    def __init__(self) -> None:
+    def __init__(self, db: Session) -> None:
+
         self.llm = AzureChatOpenAI(
             temperature=0,
             deployment_name=settings.AZURE_CHAT_DEPLOYMENT,
@@ -49,7 +51,7 @@ class RAGService:
             api_version=settings.AZURE_CHAT_API_VERSION,
             azure_endpoint=settings.AZURE_CHAT_ENDPOINT,
         )
-        self.upload_repo = UploadRepository()
+        self.upload_repo = UploadRepository(db)
         self.rag_repo = RAGRepository()
 
     def _split_by_topic_llm(self, transcript: str, chunk_len: int = 6000) -> list[str]:
@@ -195,7 +197,14 @@ class RAGService:
             background_tasks_status[video_id]["log_messages"].append(error_msg)
             return False
 
-    def run_hybrid_search(self, query: str, top_k: int = 10):
+    def run_hybrid_search(
+        self,
+        query: str,
+        content_vector_weight: float,
+        title_vector_weight: float,
+        bm25_weight: float,
+        top_k: int = 10,
+    ):
         start_time = time.time()
         query_embedding = self.run_vector_embedding(query)
         raw_results = self.rag_repo.get_scores(query, query_embedding)
@@ -237,9 +246,9 @@ class RAGService:
 
             # Apply weights
             weighted_score = (
-                settings.DEFAULT_CONTENT_VECTOR_WEIGHT * norm_content
-                + settings.DEFAULT_TITLE_VECTOR_WEIGHT * norm_title
-                + settings.DEFAULT_BM25_WEIGHT * norm_bm25
+                content_vector_weight * norm_content
+                + title_vector_weight * norm_title
+                + bm25_weight * norm_bm25
             )
             results.append((doc, weighted_score))
 
@@ -272,10 +281,20 @@ class RAGService:
     #         query_time=query_time,
     #     )
 
-    async def generate_answer(self, query: str, top_k: int = 5) -> AnswerResponse:
+    async def generate_answer(
+        self,
+        query: str,
+        content_vector_weight: float,
+        title_vector_weight: float,
+        bm25_weight: float,
+        rerank: bool,
+        top_k: int = 5,
+    ) -> AnswerResponse:
         """Generate an answer using LLM based on retrieved documents"""
         # Retrieve relevant documents
-        results, query_time = self.run_hybrid_search(query, top_k)
+        results, query_time = self.run_hybrid_search(
+            query, content_vector_weight, title_vector_weight, bm25_weight, top_k
+        )
 
         print(results)
 
