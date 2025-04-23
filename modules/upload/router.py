@@ -14,6 +14,7 @@ from .constants import ALLOWED_VIDEO_TYPES
 from typing import List
 from models.video import Video
 from core.database import SessionLocal
+import logging
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
