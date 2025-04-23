@@ -20,7 +20,7 @@ from core.database import get_db
 from utils.auth import get_current_user
 from sqlalchemy.orm import Session
 
-router = APIRouter(prefix="/upload", tags=["upload"])
+router = APIRouter(tags=["upload"])
 
 
 # 의존성 주입을 위한 함수

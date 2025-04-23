@@ -25,3 +25,4 @@ notion-client==2.2.1
 passlib
 python-jose[cryptography]
 aiofiles
+bcrypt
