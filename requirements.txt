@@ -22,3 +22,4 @@ konlpy
 passlib
 python-jose[cryptography]
 aiofiles
+bcrypt
