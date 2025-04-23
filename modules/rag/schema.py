@@ -1,7 +1,7 @@
 from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
-from langchain.output_parsers import ResponseSchema
+from config.config import settings
 
 
 class RAGPreprocessingRequest(BaseModel):
@@ -17,6 +17,9 @@ class RAGPreprocessingResponse(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
+    content_vector_weight: float = settings.DEFAULT_CONTENT_VECTOR_WEIGHT
+    title_vector_weight: float = settings.DEFAULT_TITLE_VECTOR_WEIGHT
+    bm25_weight: float = settings.DEFAULT_BM25_WEIGHT
     top_k: Optional[int] = 10
     rerank: Optional[bool] = False
 

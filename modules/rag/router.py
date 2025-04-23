@@ -81,4 +81,22 @@ async def query(
     request: SearchRequest, service: RAGService = Depends(get_rag_service)
 ) -> AnswerResponse:
     """Generate answer using RAG"""
-    return await service.generate_answer(query=request.query, top_k=request.top_k)
+    if (
+        request.content_vector_weight
+        + request.title_vector_weight
+        + request.bm25_weight
+        != 1.0
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Weights must sum to 1.0",
+        )
+
+    return await service.generate_answer(
+        query=request.query,
+        top_k=request.top_k,
+        content_vector_weight=request.content_vector_weight,
+        title_vector_weight=request.title_vector_weight,
+        bm25_weight=request.bm25_weight,
+        rerank=request.rerank,
+    )
