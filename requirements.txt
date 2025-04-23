@@ -19,6 +19,9 @@ tqdm>=4.65.0
 pgvector
 pydantic_settings
 konlpy
+requests==2.31.0
+python-jose[cryptography]
+notion-client==2.2.1
 passlib
 python-jose[cryptography]
 aiofiles
