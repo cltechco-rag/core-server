@@ -28,6 +28,7 @@ class UploadService:
     def __init__(self, db: Session):
         self.repository = UploadRepository(db)
         self.openai_service = OpenAIService(db)
+        self.db = db
 
     async def process_video_upload(
         self, file: UploadFile, title: str, background_tasks: BackgroundTasks, user_id: int
@@ -99,6 +100,7 @@ class UploadService:
             print(f"Chunk {idx + 1}/{len(chunks)} processed.")
 
         return "\n\n".join(cleaned_chunks)
+
 
     async def process_transcript_upload(
         self, file: UploadFile, title: str, background_tasks: BackgroundTasks
@@ -197,6 +199,7 @@ class UploadService:
             try:
                 self.openai_service.summarize_transcript(video_id)
                 log_msg = f"[요약] 트랜스크립트 요약 완료 (ID: {video_id})"
+                self.db.commit()
                 logger.info(log_msg)
                 background_tasks_status[video_id]["log_messages"].append(log_msg)
             except Exception as e:

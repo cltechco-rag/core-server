@@ -68,6 +68,7 @@ class OpenAIService:
                 max_tokens=1500,  # 더 긴 요약을 위해 토큰 수 증가
             )
 
+
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"텍스트 요약 중 오류 발생: {str(e)}", exc_info=True)
