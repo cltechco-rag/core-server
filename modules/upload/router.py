@@ -11,17 +11,16 @@ from fastapi import (
 from .service import UploadService
 from .schema import VideoUploadResponse
 from .constants import ALLOWED_VIDEO_TYPES
-from typing import List
 from models.video import Video
-from core.database import SessionLocal
-import logging
+from core.database import get_db
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
 
 # 의존성 주입을 위한 함수
-def get_upload_service():
-    return UploadService()
+def get_upload_service(db: Session = Depends(get_db)) -> UploadService:
+    return UploadService(db)
 
 
 @router.post(
@@ -53,6 +52,7 @@ async def upload_video(
     file: UploadFile = File(...),
     title: str = None,
     service: UploadService = Depends(get_upload_service),
+    db: Session = Depends(get_db),
 ):
     """
     영상 파일을 업로드하고 처리를 위한 큐에 등록합니다.
@@ -76,6 +76,7 @@ async def upload_video(
         result = await service.process_video_upload(
             file=file, title=title or file.filename, background_tasks=background_tasks
         )
+        db.commit()
 
         return VideoUploadResponse(
             message="Video upload successful. Processing has been queued.",
@@ -96,6 +97,7 @@ async def upload_transcript(
     title: str = Form(),
     file: UploadFile = File(...),
     service: UploadService = Depends(get_upload_service),
+    db: Session = Depends(get_db),
 ):
     """
     비디오 트랜스크립트를 업로드합니다.
@@ -115,6 +117,7 @@ async def upload_transcript(
         result = await service.process_transcript_upload(
             title=title, file=file, background_tasks=background_tasks
         )
+        db.commit()
 
         return {
             "message": "Transcript upload successful. Processing has been queued.",
@@ -128,33 +131,22 @@ async def upload_transcript(
 
 
 @router.get("/videos", summary="모든 비디오 목록 조회")
-def get_all_videos():
+def get_all_videos(db: Session = Depends(get_db)):
     """데이터베이스에 저장된 모든 비디오 목록을 반환합니다."""
-    db = SessionLocal()
-    try:
-        videos = db.query(Video).all()
-        return [video.to_dict() for video in videos]
-    finally:
-        db.close()
+    videos = db.query(Video).all()
+    return [video.to_dict() for video in videos]
 
 
 @router.get("/videos/{video_id}", summary="특정 비디오 조회")
-def get_video_by_id(video_id: str):
+def get_video_by_id(video_id: str, db: Session = Depends(get_db)):
     """ID로 특정 비디오의 정보와 변환된 텍스트를 조회합니다."""
-    from core.database import SessionLocal
-    from models.video import Video
-
-    db = SessionLocal()
-    try:
-        video = db.query(Video).filter(Video.id == int(video_id)).first()
-        if not video:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Video with id {video_id} not found",
-            )
-        return video.to_dict()
-    finally:
-        db.close()
+    video = db.query(Video).filter(Video.id == int(video_id)).first()
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video with id {video_id} not found",
+        )
+    return video.to_dict()
 
 
 @router.get("/videos/{video_id}/stt-status", summary="STT 처리 상태 확인")

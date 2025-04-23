@@ -1,7 +1,5 @@
 from fastapi import (
     APIRouter,
-    UploadFile,
-    File,
     HTTPException,
     status,
     Depends,
@@ -14,12 +12,14 @@ from .schema import (
     SearchRequest,
     AnswerResponse,
 )
+from core.database import get_db
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
 
-def get_rag_service():
-    return RAGService()
+def get_rag_service(db: Session = Depends(get_db)) -> RAGService:
+    return RAGService(db)
 
 
 @router.post(

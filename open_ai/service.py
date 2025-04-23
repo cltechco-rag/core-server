@@ -1,4 +1,4 @@
-import os
+from sqlalchemy.orm import Session
 from openai import AzureOpenAI
 import logging
 from .repository import OpenAIRepository
@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIService:
-    def __init__(self):
-        self.repository = OpenAIRepository()
+    def __init__(self, db: Session):
+        self.repository = OpenAIRepository(db)
 
     def get_transcript(self, video_id: int) -> Transcript:
         """비디오 ID로 트랜스크립트를 조회합니다."""
