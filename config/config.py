@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -29,6 +30,14 @@ class Settings(BaseSettings):
     DEFAULT_TOP_K: int = 10
     DEFAULT_RERANK: bool = False
     CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    
+    
+    # Notion OAuth settings
+    NOTION_CLIENT_ID: str = ""
+    NOTION_CLIENT_SECRET: str = ""  # 환경 변수에서 로드하세요. 절대 하드코딩하지 마세요!
+    NOTION_REDIRECT_URI: str = "http://localhost:3000/auth/notion/callback"
+    JWT_SECRET_KEY: str = "your-super-secret-key-change-this-in-production"
+
 
     class Config:
         env_file = ".env"

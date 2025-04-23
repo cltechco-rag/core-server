@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from modules.upload.router import router as upload_router
 from open_ai.router import router as openai_router
 from app.routers.auth import router as auth_router
+from app.routers.notion_auth import router as notion_auth_router
 from modules.rag.router import router as rag_router
 from core.database import Base, engine
 from models.video import Video
@@ -58,6 +59,7 @@ async def startup():
 app.include_router(upload_router)
 app.include_router(openai_router)
 app.include_router(auth_router, prefix="/auth", tags=["authentication"])
+app.include_router(notion_auth_router, tags=["notion-auth"])
 app.include_router(rag_router)
 
 

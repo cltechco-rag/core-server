@@ -5,7 +5,7 @@ from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from .repository import UploadRepository
 from .constants import ProcessingStatus
-from utils.stt_processor import STTProcessorParallel
+from utils.stt_processor_parallel import STTProcessorParallel
 from open_ai.service import OpenAIService
 import os
 import logging
