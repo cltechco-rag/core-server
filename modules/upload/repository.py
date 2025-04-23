@@ -11,9 +11,13 @@ class UploadRepository:
         self.db = SessionLocal()
 
     def save_video_metadata(
-        self, title: str, file_path: str, status: str = None
+        self, title: str, file_path: str, user_id: int, status: str = None
     ) -> Video:
-        video = Video(title=title, file_path=file_path)
+        video = Video(
+            title=title,
+            file_path=file_path,
+            user_id=user_id
+        )
         self.db.add(video)
         self.db.commit()
         self.db.refresh(video)

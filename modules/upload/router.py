@@ -8,6 +8,7 @@ from fastapi import (
     Depends,
     BackgroundTasks,
 )
+from sqlalchemy.orm import Session
 from .service import UploadService
 from .schema import VideoUploadResponse
 from .constants import ALLOWED_VIDEO_TYPES
@@ -15,6 +16,9 @@ from typing import List
 from models.video import Video
 from core.database import SessionLocal
 import logging
+from models.user import User
+from core.database import get_db
+from utils.auth import get_current_user
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -49,45 +53,22 @@ def get_upload_service():
     """,
 )
 async def upload_video(
-    background_tasks: BackgroundTasks,
+    title: str = Form(...),
     file: UploadFile = File(...),
-    title: str = None,
-    service: UploadService = Depends(get_upload_service),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    영상 파일을 업로드하고 처리를 위한 큐에 등록합니다.
-
-    - 허용된 파일 형식: MP4, AVI, MOV, WMV
-    - 최대 파일 크기: 2GB
+    영상 파일을 업로드하고 STT 처리를 시작합니다.
     """
-    try:
-        # 1. 파일 형식 검증
-        if not file.content_type in ALLOWED_VIDEO_TYPES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type. Allowed types are: {', '.join(ALLOWED_VIDEO_TYPES)}",
-            )
-
-        # 2. 파일 크기 검증 (읽지 않고 검증 방식 변경)
-        # FastAPI는 기본적으로 파일 크기 제한이 있으므로
-        # 여기서는 생략하고 서버 설정에서 처리하는 것을 권장
-
-        # 3. 서비스 계층에 처리 위임
-        result = await service.process_video_upload(
-            file=file, title=title or file.filename, background_tasks=background_tasks
-        )
-
-        return VideoUploadResponse(
-            message="Video upload successful. Processing has been queued.",
-            video_id=result["video_id"],
-            status="PROCESSING",
-            estimated_time="5-10 minutes",
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
-        )
+    service = UploadService(db)
+    return await service.process_video_upload(
+        file=file,
+        title=title,
+        background_tasks=background_tasks,
+        user_id=current_user.id
+    )
 
 
 @router.post("/transcript", summary="비디오 트랜스크립트 업로드")
