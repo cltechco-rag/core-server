@@ -262,7 +262,7 @@ async def notion_callback(request: Request, db: Session = Depends(get_db)):
         # JWT 토큰 생성
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         jwt_token = create_access_token(
-            data={"sub": user.email},
+            data={"sub": user.email, "user_id": user.id},
             expires_delta=access_token_expires
         )
         
