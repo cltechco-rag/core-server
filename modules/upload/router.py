@@ -56,10 +56,9 @@ async def upload_video(
     title: str = Form(...),
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
-    title: str = None,
     service: UploadService = Depends(get_upload_service),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """
     영상 파일을 업로드하고 STT 처리를 시작합니다.

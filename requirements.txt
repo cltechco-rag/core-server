@@ -21,3 +21,4 @@ pydantic_settings
 konlpy
 passlib
 python-jose[cryptography]
+aiofiles
