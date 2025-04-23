@@ -8,11 +8,11 @@ SQLALCHEMY_DATABASE_URL = f"postgresql://{settings.DB_USER}:{settings.DB_PASSWOR
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    pool_size=20,  # Maximum number of connections to keep open
-    max_overflow=10,  # Maximum number of connections that can be created beyond pool_size
-    pool_timeout=30,  # Seconds to wait before giving up on getting a connection
-    pool_recycle=1800,  # Recycle connections after 30 minutes
-    pool_pre_ping=True,  # Enable connection health checks
+    pool_size=5,
+    max_overflow=5,
+    pool_timeout=30,
+    pool_recycle=300,
+    pool_pre_ping=True,
     echo=True,
 )
 

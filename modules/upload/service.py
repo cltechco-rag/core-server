@@ -158,24 +158,23 @@ class UploadService:
             background_tasks_status[video_id]["progress"] = 20
 
             # STTProcessorParallel을 직접 사용하여 STT 처리 실행
-            # processor = STTProcessorParallel(model_name="medium", num_workers=6)
+            processor = STTProcessorParallel(model_name="medium", num_workers=3)
 
             # 임시 출력 디렉토리 설정
             temp_dir = "temp"
             os.makedirs(temp_dir, exist_ok=True)
 
             # STT 처리 실행
-            # transcription_result = processor.process_video_to_text(
-            #     file_path, output_dir=temp_dir
-            # )
+            transcription_result = processor.process_video_to_text(
+                file_path, output_dir=temp_dir
+            )
 
             # 취소 확인
             if video_id in cancelled_tasks:
                 raise ValueError("작업이 사용자에 의해 취소되었습니다.")
 
             # 전체 텍스트 추출
-            # full_text = transcription_result["text"]
-            full_text = "임시 텍스트"  # TODO: 실제 STT 처리 결과로 대체
+            full_text = transcription_result["text"]
             log_msg = f"[STT] 텍스트 변환 완료: {len(full_text)} 문자"
             logger.info(log_msg)
             background_tasks_status[video_id]["log_messages"].append(log_msg)

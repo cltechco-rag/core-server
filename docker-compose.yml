@@ -1,16 +1,32 @@
 services:
-  postgres:
-    image: ankane/pgvector:latest
-    container_name: lecture_qa_postgres
-    environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME}
-    ports:
-      - "5432:5432"
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lecture_qa_fastapi
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - video_uploads:/app/uploads
     restart: unless-stopped
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: lecture_qa_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - video_uploads:/usr/share/nginx/html/uploads
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - fastapi
+    restart: unless-stopped
+    networks:
+      - app-network
 
 volumes:
-  postgres_data:
+  video_uploads:
+
+networks:
+  app-network:
+    driver: bridge
