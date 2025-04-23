@@ -42,12 +42,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
-        if email is None:
+        user_id: int = payload.get("user_id")
+        if email is None or user_id is None:
             raise credentials_exception
-        token_data = TokenData(email=email)
+        token_data = TokenData(email=email, user_id=user_id)
     except JWTError:
         raise credentials_exception
-    user = db.query(User).filter(User.email == token_data.email).first()
+    user = db.query(User).filter(User.email == token_data.email, User.id == token_data.user_id).first()
     if user is None:
         raise credentials_exception
     return user 

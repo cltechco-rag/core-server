@@ -8,11 +8,16 @@ from fastapi import (
     Depends,
     BackgroundTasks,
 )
+from sqlalchemy.orm import Session
 from .service import UploadService
 from .schema import VideoUploadResponse
 from .constants import ALLOWED_VIDEO_TYPES
 from models.video import Video
+from core.database import SessionLocal
+import logging
+from models.user import User
 from core.database import get_db
+from utils.auth import get_current_user
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -48,17 +53,16 @@ def get_upload_service(db: Session = Depends(get_db)) -> UploadService:
     """,
 )
 async def upload_video(
-    background_tasks: BackgroundTasks,
+    title: str = Form(...),
     file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     title: str = None,
     service: UploadService = Depends(get_upload_service),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    영상 파일을 업로드하고 처리를 위한 큐에 등록합니다.
-
-    - 허용된 파일 형식: MP4, AVI, MOV, WMV
-    - 최대 파일 크기: 2GB
+    영상 파일을 업로드하고 STT 처리를 시작합니다.
     """
     try:
         # 1. 파일 형식 검증
@@ -74,7 +78,10 @@ async def upload_video(
 
         # 3. 서비스 계층에 처리 위임
         result = await service.process_video_upload(
-            file=file, title=title or file.filename, background_tasks=background_tasks
+            file=file,
+            title=title or file.filename,
+            background_tasks=background_tasks,
+            user_id=current_user.id,
         )
         db.commit()
 

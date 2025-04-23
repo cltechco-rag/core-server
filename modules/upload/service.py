@@ -8,10 +8,12 @@ from .constants import ProcessingStatus
 from sqlalchemy.orm import Session
 from utils.stt_processor import STTProcessorParallel
 from open_ai.service import OpenAIService
+from models.video import Video
 import os
 import logging
 import time
 from typing import Dict, Any, Set
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ class UploadService:
         self.openai_service = OpenAIService(db)
 
     async def process_video_upload(
-        self, file: UploadFile, title: str, background_tasks: BackgroundTasks
+        self, file: UploadFile, title: str, background_tasks: BackgroundTasks, user_id: int
     ):
         # 파일 저장 경로 생성
         upload_dir = "uploads"
@@ -41,7 +43,7 @@ class UploadService:
             f.write(content)
 
         # 메타데이터 저장
-        video = self.repository.save_video_metadata(title=title, file_path=file_path)
+        video = self.repository.save_video_metadata(title=title, file_path=file_path, user_id=user_id)
 
         # 백그라운드 작업 상태 초기화
         video_id = video.id
@@ -267,3 +269,25 @@ class UploadService:
             "success": True,
             "message": "작업 취소가 요청되었습니다. 진행 중인 단계가 완료된 후 취소됩니다.",
         }
+
+    async def upload_video(self, file: UploadFile, title: str, user_id: int) -> Video:
+        # 파일 저장 경로 생성
+        file_path = os.path.join("uploads", file.filename)
+        os.makedirs("uploads", exist_ok=True)
+
+        # 파일 저장
+        async with aiofiles.open(file_path, 'wb') as out_file:
+            content = await file.read()
+            await out_file.write(content)
+
+        # DB에 비디오 정보 저장
+        db_video = Video(
+            title=title,
+            file_path=file_path,
+            user_id=user_id
+        )
+        self.db.add(db_video)
+        self.db.commit()
+        self.db.refresh(db_video)
+
+        return db_video
