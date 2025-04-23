@@ -13,6 +13,7 @@ from openai import AzureOpenAI
 from konlpy.tag import Okt
 import time
 from typing import Dict, Any
+from sqlalchemy.orm import Session
 
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ Transcript:
 
 class RAGService:
 
-    def __init__(self) -> None:
+    def __init__(self, db: Session) -> None:
+
         self.llm = AzureChatOpenAI(
             temperature=0,
             deployment_name=settings.AZURE_CHAT_DEPLOYMENT,
@@ -49,7 +51,7 @@ class RAGService:
             api_version=settings.AZURE_CHAT_API_VERSION,
             azure_endpoint=settings.AZURE_CHAT_ENDPOINT,
         )
-        self.upload_repo = UploadRepository()
+        self.upload_repo = UploadRepository(db)
         self.rag_repo = RAGRepository()
 
     def _split_by_topic_llm(self, transcript: str, chunk_len: int = 6000) -> list[str]:

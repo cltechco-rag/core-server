@@ -5,6 +5,7 @@ from langchain.schema import HumanMessage
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from .repository import UploadRepository
 from .constants import ProcessingStatus
+from sqlalchemy.orm import Session
 from utils.stt_processor import STTProcessorParallel
 from open_ai.service import OpenAIService
 from models.video import Video
@@ -24,9 +25,9 @@ cancelled_tasks: Set[int] = set()
 
 
 class UploadService:
-    def __init__(self):
-        self.repository = UploadRepository()
-        self.openai_service = OpenAIService()
+    def __init__(self, db: Session):
+        self.repository = UploadRepository(db)
+        self.openai_service = OpenAIService(db)
 
     async def process_video_upload(
         self, file: UploadFile, title: str, background_tasks: BackgroundTasks, user_id: int
@@ -160,7 +161,7 @@ class UploadService:
             background_tasks_status[video_id]["progress"] = 20
 
             # STTProcessorParallel을 직접 사용하여 STT 처리 실행
-            processor = STTProcessorParallel(model_name="medium", num_workers=3)
+            processor = STTProcessorParallel(model_name="medium", num_workers=4)
 
             # 임시 출력 디렉토리 설정
             temp_dir = "temp"
