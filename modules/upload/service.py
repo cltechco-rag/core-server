@@ -14,6 +14,7 @@ import time
 from typing import Dict, Any, Set
 import aiofiles
 import ffmpeg
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +71,15 @@ class UploadService:
         background_tasks: BackgroundTasks,
         user_id: int,
     ):
+
         # 파일 저장 경로 생성
         upload_dir = "uploads"
         os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, file.filename)
+        
+        # 확장자 유지하면서 파일 이름을 유니크하게 변경
+        original_name, ext = os.path.splitext(file.filename)  # 예: ("lecture", ".mp4")
+        unique_filename = f"{original_name}_{uuid.uuid4().hex}{ext}"
+        file_path = os.path.join(upload_dir, unique_filename)
 
         # 파일 저장
         with open(file_path, "wb") as f:
